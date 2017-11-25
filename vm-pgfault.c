@@ -17,11 +17,17 @@ void *alloc_mem(void *arg)
 
 	while(iter < iterations) {
 		/* Allocate required bytes */
+#if 0
 		tmp = mmap(NULL, bytes_per_thread, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
 		if (tmp == MAP_FAILED) {
 			printf("mmap failed\n");
 			return NULL;
 		}
+#endif
+		tmp = malloc(bytes_per_thread);
+		if (!tmp)
+			exit(EXIT_FAILURE);
+
 		start = tmp;
 		nr_pages = bytes_per_thread/4096;
 		/* access page to force memory allocation via page-fault */
@@ -30,8 +36,11 @@ void *alloc_mem(void *arg)
 			/* move to the next page. */
 			start += 4096;
 		}
+#if 0
 		if (munmap(tmp, bytes_per_thread) == 1)
 			perror("error unmapping the file\n");
+#endif
+		free(tmp);
 
 		iter++;
 	}
