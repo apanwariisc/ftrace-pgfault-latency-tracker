@@ -7,6 +7,7 @@
 
 int nr_threads = 1;
 int iterations = 1;
+int ftrace = 0;
 unsigned long memory = 1;
 unsigned long bytes_per_thread = 1;
 
@@ -17,6 +18,9 @@ void set_ftrace_parameters()
 	char buff[200];
 
 	printf("Setting ftrace parameters...\n");
+	ret = system("rm -f log");
+	if (ret)
+		goto error;
 	ret = system("echo 0 > /sys/kernel/debug/tracing/tracing_on");
 	if (ret)
 		goto error;
@@ -29,6 +33,7 @@ void set_ftrace_parameters()
 	ret = system("echo __do_page_fault > /sys/kernel/debug/tracing/set_ftrace_filter");
 	if (ret)
 		goto error;
+
 	/* set buffer to 1GB. Make sure to clean it up while exiting. */
 	ret = system("echo 1048576 > /sys/kernel/debug/tracing/buffer_size_kb");
 	/* copy pid into the buffer */
@@ -51,7 +56,8 @@ error:
 void collect_and_clear_ftrace()
 {
 	int ret;
-	system("tail -n+5 /sys/kernel/debug/tracing/trace > log");
+
+	//system("tail -n+5 /sys/kernel/debug/tracing/trace > log");
 	ret = system("echo 0 > /sys/kernel/debug/tracing/tracing_on");
 	if (ret)
 		goto error;
@@ -113,8 +119,11 @@ void *alloc_mem(void *arg)
 			perror("error unmapping the file\n");
 #endif
 		free(tmp);
-
 		iter++;
+		if (ftrace) {
+			system("tail -n+5 /sys/kernel/debug/tracing/trace >> log");
+			system("> /sys/kernel/debug/tracing/trace");
+		}
 	}
 	return NULL;
 }
@@ -124,7 +133,7 @@ int main(int argc, char *argv[])
 	int i, c, pid, ret;
 	pthread_t *pthread;
 
-	while ((c = getopt(argc, argv, "m:t:i:")) != -1) {
+	while ((c = getopt(argc, argv, "m:t:i:f:")) != -1) {
 		switch(c) {
 			case 'm':
 				memory = atoi(optarg);
@@ -135,8 +144,11 @@ int main(int argc, char *argv[])
 			case 'i':
 				iterations = atoi(optarg);
 				break;
+			case 'f':
+				ftrace = atoi(optarg);
+				break;
 			default:
-				printf("Usage: %s [-m memoryGB] [-t nr_threads] [-i iterations]\n", argv[0]);
+				printf("Usage: %s [-m memoryGB] [-t nr_threads] [-i iterations] [-t trace]\n", argv[0]);
 				exit(EXIT_FAILURE);
 		}
 	}
@@ -152,18 +164,20 @@ int main(int argc, char *argv[])
 	printf("Threads: \t\t%d\n", nr_threads);
 	printf("Iterations: \t\t%d\n", iterations);
 	printf("Bytes Per Thread: \t%ld\n", bytes_per_thread);
+	if (ftrace)
+		set_ftrace_parameters();
 
-	set_ftrace_parameters();
 	for (i=0; i < nr_threads; i++)
 		pthread_create(&pthread[i], NULL, alloc_mem, NULL);
 
 	for (i=0; i < nr_threads; i++)
 		pthread_join(pthread[i],NULL);
-
-	collect_and_clear_ftrace();
-	print_ftrace_summary();
-	/* This is precautionary. */
-	system("echo 1408 > /sys/kernel/debug/tracing/buffer_size_kb");
+	if (ftrace) {
+		collect_and_clear_ftrace();
+		print_ftrace_summary();
+		/* This is precautionary. */
+		system("echo 1408 > /sys/kernel/debug/tracing/buffer_size_kb");
+	}
 	printf("Exiting successfully.\n");
 	return 0;
 }
