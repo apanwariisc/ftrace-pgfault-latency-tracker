@@ -1,0 +1,7 @@
+This program is designed to stress the page fault handling routine of the
+underlying OS. This can be configure with the following command-line
+arguments -
+
+m: total memory to be allocated (in GB)
+t: number of threads
+i: iterations (this will influence the total runtime).
