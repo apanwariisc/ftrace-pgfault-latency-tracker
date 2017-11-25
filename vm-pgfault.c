@@ -12,7 +12,7 @@ unsigned long bytes_per_thread = 1;
 
 void *alloc_mem(void *arg)
 {
-	int fd, nr_pages, iter;
+	int fd, nr_pages, iter = 0;
 	char *tmp, *start;
 
 	while(iter < iterations) {
