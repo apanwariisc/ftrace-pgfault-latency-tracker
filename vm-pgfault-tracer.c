@@ -17,37 +17,54 @@ void set_ftrace_parameters()
 	int pid = getpid();
 	char buff[200];
 
-	printf("Setting ftrace parameters...\n");
+	printf("Setting ftrace parameters ...\n");
 	ret = system("rm -f log");
 	if (ret)
 		goto error;
+
+	printf("Disabling trace ...\n");
 	ret = system("echo 0 > /sys/kernel/debug/tracing/tracing_on");
 	if (ret)
 		goto error;
+
+	printf("Clearing trace file ...\n");
 	ret = system("> /sys/kernel/debug/tracing/trace");
 	if (ret)
 		goto error;
+
+	printf("Selecting current tracer ...\n");
 	ret = system("echo function_graph > /sys/kernel/debug/tracing/current_tracer");
 	if (ret)
 		goto error;
+
+	printf("Selecting ftrace filter ...\n");
 	ret = system("echo __do_page_fault > /sys/kernel/debug/tracing/set_ftrace_filter");
 	if (ret)
 		goto error;
 
+	printf("Enabling trace for forked pidsi ...\n");
+	ret = system("echo 1 > /sys/kernel/debug/tracing/options/function-fork");
+	if (ret)
+		goto error;
+
 	/* set buffer to 1GB. Make sure to clean it up while exiting. */
+	printf("Increasing trace buffer size ...\n");
 	ret = system("echo 1048576 > /sys/kernel/debug/tracing/buffer_size_kb");
 	/* copy pid into the buffer */
+	printf("Configuring ftrace PID ...\n");
 	sprintf(buff, "echo %d > /sys/kernel/debug/tracing/set_ftrace_pid", pid);
 	ret = system(buff);
 	if (ret)
 		goto error;
 
+	printf("Enabling tracing ...\n");
 	ret = system("echo 1 > /sys/kernel/debug/tracing/tracing_on");
 	if (ret)
 		goto error;
 
-	printf("ftrace configured. executing the worklod...\n ");
+	printf("ftrace configured. Executing the workload...\n ");
 	return;
+
 error:
 	printf("Error occured while setting ftrace parameters\n");
 	exit(EXIT_FAILURE);
@@ -90,7 +107,7 @@ void print_ftrace_summary()
 
 void *alloc_mem(void *arg)
 {
-	int fd, nr_pages, iter = 0;
+	int fd, nr_pages, iter = 0, j;
 	char *tmp, *start;
 
 	while(iter < iterations) {
@@ -106,13 +123,15 @@ void *alloc_mem(void *arg)
 		if (!tmp)
 			exit(EXIT_FAILURE);
 
-		start = tmp;
-		nr_pages = bytes_per_thread/4096;
 		/* access page to force memory allocation via page-fault */
-		while(nr_pages--) {
-			*start = 'A';
-			/* move to the next page. */
-			start += 4096;
+		for (j = 0; j < 10; j++) {
+			start = tmp;
+			nr_pages = bytes_per_thread/4096;
+			while(nr_pages--) {
+				*start = 'A';
+				/* move to the next page. */
+				start += 4096;
+			}
 		}
 #if 0
 		if (munmap(tmp, bytes_per_thread) == 1)
@@ -121,6 +140,7 @@ void *alloc_mem(void *arg)
 		free(tmp);
 		iter++;
 		if (ftrace) {
+			printf("dumping and clearing trace");
 			system("tail -n+5 /sys/kernel/debug/tracing/trace >> log");
 			system("> /sys/kernel/debug/tracing/trace");
 		}
@@ -133,6 +153,7 @@ int main(int argc, char *argv[])
 	int i, c, pid, ret;
 	pthread_t *pthread;
 
+	printf("PID: %d\n", getpid());
 	while ((c = getopt(argc, argv, "m:t:i:f:")) != -1) {
 		switch(c) {
 			case 'm':
